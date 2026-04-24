@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Formatter & Beautifier — Free Online Tool</title>
+  <meta name="description" content="Format, beautify, and validate JSON instantly. Free online JSON formatter with syntax highlighting. Paste your JSON and get clean, readable output in one click.">
+  <meta name="keywords" content="json formatter, json beautifier, format json online, json validator, json pretty print, json viewer">
+  <link rel="canonical" href="https://formatmyjson.net/">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #e2e8f0; min-height: 100vh; }
+    header { background: #16213e; border-bottom: 1px solid #0f3460; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: #63b3ed; }
+    .tagline { font-size: 0.8rem; color: #718096; }
+    .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0.75rem 1.5rem; background: #16213e; border-bottom: 1px solid #0f3460; }
+    .btn { padding: 0.45rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: all 0.15s; }
+    .btn-primary { background: #2b6cb0; color: white; }
+    .btn-primary:hover { background: #2c5282; }
+    .btn-secondary { background: #2d3748; color: #a0aec0; }
+    .btn-secondary:hover { background: #4a5568; color: white; }
+    .btn-danger { background: #742a2a; color: #feb2b2; }
+    .btn-danger:hover { background: #9b2c2c; }
+    .btn-success { background: #276749; color: #9ae6b4; }
+    .indent-label { color: #718096; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
+    select { background: #2d3748; color: #e2e8f0; border: 1px solid #4a5568; border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.85rem; }
+    .editor-wrap { display: grid; grid-template-columns: 1fr 1fr; height: calc(100vh - 130px); min-height: 400px; }
+    @media(max-width: 700px) { .editor-wrap { grid-template-columns: 1fr; } }
+    .pane { display: flex; flex-direction: column; border-right: 1px solid #0f3460; }
+    .pane:last-child { border-right: none; }
+    .pane-label { padding: 0.4rem 1rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; background: #16213e; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+    .status { font-size: 0.8rem; font-weight: normal; text-transform: none; letter-spacing: 0; }
+    .status.ok { color: #68d391; }
+    .status.err { color: #fc8181; }
+    textarea, #output {
+      flex: 1; width: 100%; background: #1a1a2e; color: #a8d8a8;
+      font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.88rem; line-height: 1.6; padding: 1rem;
+      border: none; resize: none; outline: none;
+    }
+    #output { color: #e2e8f0; overflow: auto; white-space: pre; }
+    .key { color: #63b3ed; }
+    .string { color: #68d391; }
+    .number { color: #f6ad55; }
+    .bool { color: #f687b3; }
+    .null { color: #a0aec0; }
+    .content-section { background: #16213e; padding: 2rem 1.5rem; border-top: 1px solid #0f3460; color: #a0aec0; line-height: 1.7; }
+    .content-section h2 { color: #63b3ed; margin: 1.25rem 0 0.5rem; font-size: 1rem; }
+    .content-section p { margin-bottom: 0.75rem; }
+    .content-section ul { padding-left: 1.25rem; }
+    .content-section li { margin-bottom: 0.35rem; }
+    footer { text-align: center; padding: 1.5rem; color: #4a5568; font-size: 0.82rem; background: #16213e; border-top: 1px solid #0f3460; }
+    footer a { color: #4a5568; margin: 0 0.5rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>{ } JSON Formatter & Beautifier</h1>
+    <div class="tagline">Free • Instant • Runs in your browser — nothing is sent to any server</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="btn btn-primary" onclick="format()">▶ Format JSON</button>
+  <button class="btn btn-secondary" onclick="minify()">⟨⟩ Minify</button>
+  <button class="btn btn-secondary" onclick="copyOutput()">⎘ Copy</button>
+  <button class="btn btn-secondary" onclick="sampleJSON()">📋 Sample</button>
+  <button class="btn btn-danger" onclick="clearAll()">✕ Clear</button>
+  <div class="indent-label">
+    Indent:
+    <select id="indentSize" onchange="format()">
+      <option value="2">2 spaces</option>
+      <option value="4">4 spaces</option>
+      <option value="1">Tab</option>
+    </select>
+  </div>
+</div>
+
+<div class="editor-wrap">
+  <div class="pane">
+    <div class="pane-label">
+      Input
+      <span id="inputStatus" class="status"></span>
+    </div>
+    <textarea id="input" placeholder='Paste your JSON here...&#10;&#10;Example:&#10;{"name":"Warren","version":1,"active":true}' oninput="liveCheck()"></textarea>
+  </div>
+  <div class="pane">
+    <div class="pane-label">
+      Formatted Output
+      <span id="outputStatus" class="status"></span>
+    </div>
+    <div id="output"></div>
+  </div>
+</div>
+
+<div class="content-section">
+  <h2>What is a JSON Formatter?</h2>
+  <p>A JSON formatter (also called a JSON beautifier or JSON pretty printer) takes raw, compressed JSON data and reformats it with proper indentation and line breaks, making it easy to read and understand.</p>
+
+  <h2>How to Use</h2>
+  <ul>
+    <li>Paste your JSON into the left panel</li>
+    <li>Click <strong>Format JSON</strong> or it formats automatically as you type</li>
+    <li>Copy the formatted output from the right panel</li>
+    <li>Use <strong>Minify</strong> to compress JSON back to one line</li>
+  </ul>
+
+  <h2>Common Use Cases</h2>
+  <ul>
+    <li>Debugging API responses from REST or GraphQL endpoints</li>
+    <li>Reading configuration files (.json)</li>
+    <li>Inspecting database exports and data feeds</li>
+    <li>Validating JSON syntax before deployment</li>
+  </ul>
+</div>
+
+<footer>
+  © 2026 FormatMyJSON.com — Free JSON formatter tool
+  <span style="display:block;margin-top:0.35rem"><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Use</a></span>
+</footer>
+
+<script>
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+
+function syntaxHighlight(json) {
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(m) {
+    let cls = 'number';
+    if (/^"/.test(m)) { cls = /:$/.test(m) ? 'key' : 'string'; }
+    else if (/true|false/.test(m)) { cls = 'bool'; }
+    else if (/null/.test(m)) { cls = 'null'; }
+    return `<span class="${cls}">${m}</span>`;
+  });
+}
+
+function format() {
+  const raw = input.value.trim();
+  if (!raw) { output.innerHTML = ''; return; }
+  try {
+    const indent = document.getElementById('indentSize').value === '1' ? '\t' : parseInt(document.getElementById('indentSize').value);
+    const parsed = JSON.parse(raw);
+    const formatted = JSON.stringify(parsed, null, indent);
+    output.innerHTML = syntaxHighlight(formatted);
+    document.getElementById('inputStatus').textContent = '✓ Valid JSON';
+    document.getElementById('inputStatus').className = 'status ok';
+    document.getElementById('outputStatus').textContent = `${formatted.split('\n').length} lines`;
+    document.getElementById('outputStatus').className = 'status ok';
+  } catch(e) {
+    output.innerHTML = '';
+    document.getElementById('inputStatus').textContent = '✗ ' + e.message;
+    document.getElementById('inputStatus').className = 'status err';
+    document.getElementById('outputStatus').textContent = '';
+  }
+}
+
+function minify() {
+  try {
+    const parsed = JSON.parse(input.value);
+    output.innerHTML = syntaxHighlight(JSON.stringify(parsed));
+    document.getElementById('inputStatus').textContent = '✓ Minified';
+    document.getElementById('inputStatus').className = 'status ok';
+  } catch(e) {
+    document.getElementById('inputStatus').textContent = '✗ ' + e.message;
+    document.getElementById('inputStatus').className = 'status err';
+  }
+}
+
+function copyOutput() {
+  const text = output.innerText;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.btn-secondary:nth-child(3)');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '⎘ Copy', 1500);
+  });
+}
+
+function clearAll() {
+  input.value = ''; output.innerHTML = '';
+  document.getElementById('inputStatus').textContent = '';
+  document.getElementById('outputStatus').textContent = '';
+}
+
+function sampleJSON() {
+  input.value = `{"name":"Warren Business Group","founded":2026,"active":true,"team":["Warren","Max"],"stats":{"clients":3,"revenue":null}}`;
+  format();
+}
+
+function liveCheck() {
+  const raw = input.value.trim();
+  if (!raw) { document.getElementById('inputStatus').textContent = ''; return; }
+  try { JSON.parse(raw); format(); } catch(e) {
+    document.getElementById('inputStatus').textContent = '✗ Invalid JSON';
+    document.getElementById('inputStatus').className = 'status err';
+  }
+}
+</script>
+</body>
+</html>
