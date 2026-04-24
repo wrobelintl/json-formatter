@@ -63,11 +63,11 @@
 </header>
 
 <div class="toolbar">
-  <button class="btn btn-primary" onclick="format()">▶ Format JSON</button>
-  <button class="btn btn-secondary" onclick="minify()">⟨⟩ Minify</button>
+  <button class="btn btn-primary" onclick="format()"> Format JSON</button>
+  <button class="btn btn-secondary" onclick="minify()"> Minify</button>
   <button class="btn btn-secondary" onclick="copyOutput()">⎘ Copy</button>
-  <button class="btn btn-secondary" onclick="sampleJSON()">📋 Sample</button>
-  <button class="btn btn-danger" onclick="clearAll()">✕ Clear</button>
+  <button class="btn btn-secondary" onclick="sampleJSON()"> Sample</button>
+  <button class="btn btn-danger" onclick="clearAll()"> Clear</button>
   <div class="indent-label">
     Indent:
     <select id="indentSize" onchange="format()">
@@ -127,10 +127,10 @@ const output = document.getElementById('output');
 
 function syntaxHighlight(json) {
   json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(m) {
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}\\[^u][^\\"])*"(\s*:)?\b(truefalsenull)\b-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function(m) {
     let cls = 'number';
     if (/^"/.test(m)) { cls = /:$/.test(m) ? 'key' : 'string'; }
-    else if (/true|false/.test(m)) { cls = 'bool'; }
+    else if (/truefalse/.test(m)) { cls = 'bool'; }
     else if (/null/.test(m)) { cls = 'null'; }
     return `<span class="${cls}">${m}</span>`;
   });
@@ -144,13 +144,13 @@ function format() {
     const parsed = JSON.parse(raw);
     const formatted = JSON.stringify(parsed, null, indent);
     output.innerHTML = syntaxHighlight(formatted);
-    document.getElementById('inputStatus').textContent = '✓ Valid JSON';
+    document.getElementById('inputStatus').textContent = ' Valid JSON';
     document.getElementById('inputStatus').className = 'status ok';
     document.getElementById('outputStatus').textContent = `${formatted.split('\n').length} lines`;
     document.getElementById('outputStatus').className = 'status ok';
   } catch(e) {
     output.innerHTML = '';
-    document.getElementById('inputStatus').textContent = '✗ ' + e.message;
+    document.getElementById('inputStatus').textContent = ' ' + e.message;
     document.getElementById('inputStatus').className = 'status err';
     document.getElementById('outputStatus').textContent = '';
   }
@@ -160,10 +160,10 @@ function minify() {
   try {
     const parsed = JSON.parse(input.value);
     output.innerHTML = syntaxHighlight(JSON.stringify(parsed));
-    document.getElementById('inputStatus').textContent = '✓ Minified';
+    document.getElementById('inputStatus').textContent = ' Minified';
     document.getElementById('inputStatus').className = 'status ok';
   } catch(e) {
-    document.getElementById('inputStatus').textContent = '✗ ' + e.message;
+    document.getElementById('inputStatus').textContent = ' ' + e.message;
     document.getElementById('inputStatus').className = 'status err';
   }
 }
@@ -173,7 +173,7 @@ function copyOutput() {
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
     const btn = document.querySelector('.btn-secondary:nth-child(3)');
-    btn.textContent = '✓ Copied!';
+    btn.textContent = ' Copied!';
     setTimeout(() => btn.textContent = '⎘ Copy', 1500);
   });
 }
@@ -193,7 +193,7 @@ function liveCheck() {
   const raw = input.value.trim();
   if (!raw) { document.getElementById('inputStatus').textContent = ''; return; }
   try { JSON.parse(raw); format(); } catch(e) {
-    document.getElementById('inputStatus').textContent = '✗ Invalid JSON';
+    document.getElementById('inputStatus').textContent = ' Invalid JSON';
     document.getElementById('inputStatus').className = 'status err';
   }
 }
