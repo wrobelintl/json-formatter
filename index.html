@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JSON Formatter & Beautifier — Free Online Tool</title>
-  <meta name="description" content="Format, beautify, and validate JSON instantly. Free online JSON formatter with syntax highlighting. Paste your JSON and get clean, readable output in one click.">
+  <meta name="description" content="Format, beautify, and validate JSON instantly. Free online JSON formatter with instant validation and clear error messages. Paste your JSON and get clean, readable output in one click.">
   <meta name="keywords" content="json formatter, json beautifier, format json online, json validator, json pretty print, json viewer">
   <link rel="canonical" href="https://formatmyjson.net/">
   <style>
@@ -25,7 +25,7 @@
     .btn-success { background: #276749; color: #9ae6b4; }
     .indent-label { color: #718096; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
     select { background: #2d3748; color: #e2e8f0; border: 1px solid #4a5568; border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.85rem; }
-    .editor-wrap { display: grid; grid-template-columns: 1fr 1fr; height: calc(100vh - 130px); min-height: 400px; }
+    .editor-wrap { display: grid; grid-template-columns: 1fr 1fr; height: 60vh; min-height: 400px; }
     @media(max-width: 700px) { .editor-wrap { grid-template-columns: 1fr; } }
     .pane { display: flex; flex-direction: column; border-right: 1px solid #0f3460; }
     .pane:last-child { border-right: none; }
@@ -50,6 +50,14 @@
     .content-section p { margin-bottom: 0.75rem; }
     .content-section ul { padding-left: 1.25rem; }
     .content-section li { margin-bottom: 0.35rem; }
+    .content-section a { color: #63b3ed; }
+    .content-section strong { color: #cbd5e0; }
+    .content-section pre { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 6px; padding: 0.75rem 1rem; overflow-x: auto; margin: 0.4rem 0 0.85rem; font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace; font-size: 0.82rem; line-height: 1.5; color: #a8d8a8; }
+    .content-section code { font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace; font-size: 0.85em; color: #f6ad55; }
+    .content-section pre code { color: inherit; font-size: inherit; }
+    .content-section .faq p { margin-bottom: 0.6rem; }
+    .intro { background: #16213e; padding: 0.85rem 1.5rem; border-bottom: 1px solid #0f3460; color: #a0aec0; font-size: 0.9rem; line-height: 1.6; }
+    .intro strong { color: #cbd5e0; }
     footer { text-align: center; padding: 1.5rem; color: #4a5568; font-size: 0.82rem; background: #16213e; border-top: 1px solid #0f3460; }
     footer a { color: #4a5568; margin: 0 0.5rem; }
   </style>
@@ -80,6 +88,10 @@
   </div>
 </div>
 
+<div class="intro">
+  <strong>Format, validate, and minify JSON right in your browser.</strong> FormatMyJSON is a free, no-sign-up tool that runs entirely on your device — your JSON is never uploaded to our servers. Paste JSON on the left to get clean, readable output on the right instantly.
+</div>
+
 <div class="editor-wrap">
   <div class="pane">
     <div class="pane-label">
@@ -98,28 +110,91 @@
 </div>
 
 <div class="content-section">
-  <h2>What is a JSON Formatter?</h2>
-  <p>A JSON formatter (also called a JSON beautifier or JSON pretty printer) takes raw, compressed JSON data and reformats it with proper indentation and line breaks, making it easy to read and understand.</p>
+  <h2>What is a JSON formatter?</h2>
+  <p>A JSON formatter (also called a JSON beautifier or pretty printer) takes raw, compressed JSON and reformats it with consistent indentation and line breaks so it is easy to read, review, and debug. FormatMyJSON also validates your JSON as you type and can minify it back down to a single compact line — all in your browser, with nothing uploaded to a server.</p>
 
-  <h2>How to Use</h2>
+  <h2>How to use</h2>
   <ul>
-    <li>Paste your JSON into the left panel</li>
-    <li>Click <strong>Format JSON</strong> or it formats automatically as you type</li>
-    <li>Copy the formatted output from the right panel</li>
-    <li>Use <strong>Minify</strong> to compress JSON back to one line</li>
+    <li>Paste your JSON into the <strong>Input</strong> panel on the left.</li>
+    <li>It formats automatically as you type, or click <strong>Format JSON</strong>.</li>
+    <li>Choose an indentation — 2 spaces, 4 spaces, or a tab — from the selector.</li>
+    <li>As you type, the status shows whether your JSON is valid or invalid; click <strong>Format</strong> (or <strong>Minify</strong>) to see the parser's message pinpointing the first error.</li>
+    <li>Copy the result from the <strong>Formatted Output</strong> panel, or click <strong>Minify</strong> to compress it to one line.</li>
   </ul>
 
-  <h2>Common Use Cases</h2>
+  <h2>Format vs. Minify vs. Validate — when to use each</h2>
   <ul>
-    <li>Debugging API responses from REST or GraphQL endpoints</li>
-    <li>Reading configuration files (.json)</li>
-    <li>Inspecting database exports and data feeds</li>
-    <li>Validating JSON syntax before deployment</li>
+    <li><strong>Format (beautify):</strong> use when you want to <em>read</em> JSON — inspecting an API response, reviewing a config file, or debugging a data feed.</li>
+    <li><strong>Minify:</strong> use when you want the <em>smallest</em> output — reducing payload size, embedding JSON compactly, or storing it on a single line.</li>
+    <li><strong>Validate:</strong> happens as you type. The status flags valid or invalid JSON; clicking Format or Minify surfaces the parser's message and the position of the first syntax error, so you catch mistakes before shipping.</li>
+  </ul>
+
+  <h2>Choosing an indentation</h2>
+  <ul>
+    <li><strong>2 spaces</strong> — compact; common in JavaScript, Node, and npm projects.</li>
+    <li><strong>4 spaces</strong> — more visual separation; common in many enterprise and Python-adjacent styles.</li>
+    <li><strong>Tab</strong> — inserts one tab character per level, so each viewer's editor controls the displayed width.</li>
+  </ul>
+
+  <h2>Worked example</h2>
+  <p>Input (minified):</p>
+  <pre><code>{"name":"Ada","langs":["json","yaml"],"active":true,"projects":null}</code></pre>
+  <p>Output (2-space format):</p>
+  <pre><code>{
+  "name": "Ada",
+  "langs": [
+    "json",
+    "yaml"
+  ],
+  "active": true,
+  "projects": null
+}</code></pre>
+
+  <h2>Common JSON errors</h2>
+  <p>FormatMyJSON parses your input with the browser's built-in JSON engine. If parsing fails, it shows the parser's error so you can find the problem. The most common reasons JSON is rejected:</p>
+  <ul>
+    <li>A <strong>trailing comma</strong> after the last item in an object or array.</li>
+    <li><strong>Single quotes</strong> instead of double quotes — JSON requires <code>"double quotes"</code>.</li>
+    <li><strong>Unquoted keys</strong> — every key must be a quoted string.</li>
+    <li>A <strong>missing comma, bracket, or brace</strong>.</li>
+    <li><strong>Comments</strong> — standard JSON does not allow <code>//</code> or <code>/* */</code>.</li>
+  </ul>
+
+  <h2>Is my JSON private?</h2>
+  <p>Yes. All formatting, validation, and minifying happen locally in your browser using its native JSON engine. Your input is <strong>never uploaded, stored, or logged</strong> on our servers — it exists only on your device and is discarded when you close or refresh the page. See our <a href="/privacy">Privacy Policy</a> for details, including the Google AdSense advertising disclosure.</p>
+
+  <h2>A note on sensitive data</h2>
+  <p>Because FormatMyJSON processes everything locally, your JSON never leaves your device. Even so, as a good general habit, avoid pasting <strong>live secrets</strong> — passwords, API keys, access tokens, private keys, or real customer records — into any online tool. If you need to inspect JSON that contains credentials, replace the sensitive values with placeholders first.</p>
+
+  <h2>Common use cases</h2>
+  <ul>
+    <li>Debugging API responses from REST or GraphQL endpoints.</li>
+    <li>Reading and editing configuration files (<code>.json</code>).</li>
+    <li>Inspecting database exports, logs, and data feeds.</li>
+    <li>Checking that JSON is valid before committing or deploying it.</li>
+    <li>Making a compact JSON payload readable, or a readable one compact.</li>
+  </ul>
+
+  <h2>Frequently asked questions</h2>
+  <div class="faq">
+    <p><strong>Is FormatMyJSON free?</strong> Yes — completely free, with no account or sign-up.</p>
+    <p><strong>Does it work offline?</strong> Once the page has loaded, formatting, validating, and minifying work without a network connection.</p>
+    <p><strong>Can it repair broken JSON?</strong> No — it reports the first error it finds so you can fix it, but it does not auto-repair invalid JSON.</p>
+    <p><strong>Is there a size limit?</strong> There is no fixed limit, but because everything runs in your browser, very large files may format more slowly on lower-powered devices.</p>
+    <p><strong>Does it keep a history of what I paste?</strong> No. Your input lives only in the page and is gone when you close or refresh the tab.</p>
+  </div>
+
+  <h2>Good to know</h2>
+  <ul>
+    <li>Supports <strong>standard JSON</strong> only — no comments, trailing commas, or JSON5 extensions.</li>
+    <li>It reports the <strong>first</strong> syntax error it encounters, not every error at once.</li>
+    <li>It validates structure; it does not check your JSON against a schema.</li>
+    <li>Very large inputs are limited by your device's memory and speed, since all work is local.</li>
   </ul>
 </div>
 
 <footer>
-  © 2026 FormatMyJSON.com — Free JSON formatter tool
+  © 2026 formatmyjson.net — Free JSON formatter tool
   <span style="display:block;margin-top:0.35rem"><a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Use</a></span>
   <p style="margin-top:0.5rem">A service of <a href="https://warrenbg.com" style="color:#f59e0b;font-weight:700;">Warren Business Group</a> &mdash; Building AI-powered businesses.</p>
 </footer>
