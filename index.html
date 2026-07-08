@@ -82,7 +82,8 @@
 <div class="toolbar">
   <button class="btn btn-primary" onclick="format()"> Format JSON</button>
   <button class="btn btn-secondary" onclick="minify()"> Minify</button>
-  <button class="btn btn-secondary" onclick="copyOutput()">⎘ Copy</button>
+  <button id="copyBtn" class="btn btn-secondary" onclick="copyOutput()">⎘ Copy</button>
+  <button id="downloadBtn" class="btn btn-secondary" onclick="downloadOutput()" title="Saves the output as a .json file — created in your browser, nothing is uploaded"> Download</button>
   <button class="btn btn-secondary" onclick="sampleJSON()"> Sample</button>
   <button class="btn btn-danger" onclick="clearAll()"> Clear</button>
   <div class="indent-label">
@@ -558,14 +559,42 @@ function minify() {
   renderInvalid(r, true);
 }
 
+// Per-button flash feedback with a stored timer, targeted by stable id (never by toolbar order).
+const btnFlashTimers = {};
+function flashBtn(id, tempText, restoreText) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.textContent = tempText;
+  clearTimeout(btnFlashTimers[id]);
+  btnFlashTimers[id] = setTimeout(() => { btn.textContent = restoreText; }, 1500);
+}
+
 function copyOutput() {
   const text = output.innerText;
-  if (!text) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('.btn-secondary:nth-child(3)');
-    btn.textContent = ' Copied!';
-    setTimeout(() => btn.textContent = '⎘ Copy', 1500);
-  });
+  if (!text) { flashBtn('copyBtn', 'Nothing to copy', '⎘ Copy'); return; }
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    flashBtn('copyBtn', 'Copy failed', '⎘ Copy');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(
+    () => flashBtn('copyBtn', 'Copied!', '⎘ Copy'),
+    () => flashBtn('copyBtn', 'Copy failed', '⎘ Copy')
+  );
+}
+
+function downloadOutput() {
+  const text = output.innerText;
+  if (!text) { flashBtn('downloadBtn', 'Nothing to download', ' Download'); return; }
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'formatmyjson-output.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flashBtn('downloadBtn', 'Downloaded', ' Download');
 }
 
 function clearAll() {
