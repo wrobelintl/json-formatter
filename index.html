@@ -35,6 +35,11 @@
     .status { font-size: 0.8rem; font-weight: normal; text-transform: none; letter-spacing: 0; }
     .status.ok { color: #68d391; }
     .status.err { color: #fc8181; }
+    .error-detail { background: #16213e; border-bottom: 1px solid #0f3460; border-left: 3px solid #fc8181; padding: 0.6rem 1.5rem; overflow-x: auto; }
+    .error-detail pre { font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace; font-size: 0.82rem; line-height: 1.5; white-space: pre; margin: 0; }
+    .error-line { color: #e2e8f0; }
+    .error-caret { color: #fc8181; }
+    .error-message { margin-top: 0.4rem; color: #fc8181; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
     textarea, #output {
       flex: 1; width: 100%; background: #1a1a2e; color: #a8d8a8;
       font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
@@ -92,6 +97,12 @@
 
 <div class="intro">
   <strong>Format, validate, and minify JSON right in your browser.</strong> FormatMyJSON is a free, no-sign-up tool that runs entirely on your device — your JSON is never uploaded to our servers. Paste JSON on the left to get clean, readable output on the right instantly.
+</div>
+
+<div id="errorDetail" class="error-detail" hidden>
+  <pre id="errorExcerpt" class="error-line"></pre>
+  <pre id="errorCaret" class="error-caret"></pre>
+  <div id="errorMessage" class="error-message"></div>
 </div>
 
 <div class="editor-wrap">
@@ -216,36 +227,335 @@ function syntaxHighlight(json) {
   });
 }
 
-function format() {
-  const raw = input.value.trim();
-  if (!raw) { output.innerHTML = ''; return; }
-  try {
-    const indent = document.getElementById('indentSize').value === '1' ? '\t' : parseInt(document.getElementById('indentSize').value);
-    const parsed = JSON.parse(raw);
-    const formatted = JSON.stringify(parsed, null, indent);
-    output.innerHTML = syntaxHighlight(formatted);
-    document.getElementById('inputStatus').textContent = ' Valid JSON';
-    document.getElementById('inputStatus').className = 'status ok';
-    document.getElementById('outputStatus').textContent = `${formatted.split('\n').length} lines`;
-    document.getElementById('outputStatus').className = 'status ok';
-  } catch(e) {
-    output.innerHTML = '';
-    document.getElementById('inputStatus').textContent = ' ' + e.message;
-    document.getElementById('inputStatus').className = 'status err';
-    document.getElementById('outputStatus').textContent = '';
+// ---- error-UX helpers: JSON.parse stays the sole validity authority; the scanner below is
+// advisory only (it supplies a position when the engine message omits one, never a verdict). ----
+const SCANNER_LIVE_LIMIT = 262144; // live keystrokes skip the O(n) scanner fallback above this size
+const EMPTY_RE = /^[ \t\n\r]*$/;   // legal JSON whitespace only (deliberately not \s)
+
+function lineColFromIndex(text, index) {
+  let line = 1, last = -1;
+  for (let i = 0; i < index; i++) {
+    if (text.charCodeAt(i) === 0x0A) { line++; last = i; }
+  }
+  return { line: line, col: index - last };
+}
+
+function indexFromLineCol(text, line, col) {
+  let idx = 0;
+  for (let l = 1; l < line; l++) {
+    const nl = text.indexOf('\n', idx);
+    if (nl === -1) return text.length;
+    idx = nl + 1;
+  }
+  let lineEnd = text.indexOf('\n', idx);
+  if (lineEnd === -1) lineEnd = text.length;
+  const target = idx + (col - 1);
+  return target > lineEnd ? lineEnd : target;
+}
+
+function extractEnginePosition(message) {
+  // $-anchored so a quoted user snippet containing "at position N" can't be misread as a position.
+  let m = /at position (\d+)(?: \(line (\d+) column (\d+)\))?$/.exec(message);
+  if (m) return { index: +m[1], line: m[2] ? +m[2] : null, col: m[3] ? +m[3] : null };
+  m = /at line (\d+) column (\d+) of the JSON data$/.exec(message);
+  if (m) return { index: null, line: +m[1], col: +m[2] };
+  return null; // Safari/JSC and V8 snippet-form messages → scanner fallback
+}
+
+// Strict JSON grammar, single pass, explicit stack (no recursion → safe at extreme depth).
+// Returns the first offending index in [0, len] (len ⇒ unexpected end), or -1 if none found.
+function findJsonErrorIndex(text) {
+  const n = text.length;
+  let i = 0;
+  const stack = []; // 1 = object, 2 = array
+
+  function skipWs() {
+    while (i < n) {
+      const c = text.charCodeAt(i);
+      if (c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D) i++;
+      else break;
+    }
+  }
+  function scanString() {
+    i++;
+    while (i < n) {
+      const c = text.charCodeAt(i);
+      if (c === 0x22) { i++; return -1; }
+      if (c === 0x5C) {
+        i++;
+        if (i >= n) return n;
+        const e = text.charCodeAt(i);
+        if (e === 0x22 || e === 0x5C || e === 0x2F || e === 0x62 || e === 0x66 ||
+            e === 0x6E || e === 0x72 || e === 0x74) { i++; continue; }
+        if (e === 0x75) { // \uXXXX — 4 hex digits; lone surrogates are legal JSON
+          for (let h = 1; h <= 4; h++) {
+            if (i + h >= n) return n;
+            const x = text.charCodeAt(i + h);
+            const hex = (x >= 0x30 && x <= 0x39) || (x >= 0x41 && x <= 0x46) || (x >= 0x61 && x <= 0x66);
+            if (!hex) return i + h;
+          }
+          i += 5; continue;
+        }
+        return i; // bad escape
+      }
+      if (c < 0x20) return i; // raw control char in string
+      i++;
+    }
+    return n; // unterminated
+  }
+  function scanNumber() {
+    let c;
+    if (text.charCodeAt(i) === 0x2D) { i++; if (i >= n) return n; }
+    c = text.charCodeAt(i);
+    if (c === 0x30) { i++; }
+    else if (c >= 0x31 && c <= 0x39) {
+      i++;
+      while (i < n) { c = text.charCodeAt(i); if (c >= 0x30 && c <= 0x39) i++; else break; }
+    } else return i;
+    if (i < n && text.charCodeAt(i) === 0x2E) {
+      i++;
+      if (i >= n) return n;
+      c = text.charCodeAt(i);
+      if (!(c >= 0x30 && c <= 0x39)) return i;
+      while (i < n) { c = text.charCodeAt(i); if (c >= 0x30 && c <= 0x39) i++; else break; }
+    }
+    if (i < n) {
+      c = text.charCodeAt(i);
+      if (c === 0x65 || c === 0x45) {
+        i++;
+        if (i < n) { c = text.charCodeAt(i); if (c === 0x2B || c === 0x2D) i++; }
+        if (i >= n) return n;
+        c = text.charCodeAt(i);
+        if (!(c >= 0x30 && c <= 0x39)) return i;
+        while (i < n) { c = text.charCodeAt(i); if (c >= 0x30 && c <= 0x39) i++; else break; }
+      }
+    }
+    return -1;
+  }
+  function scanLiteral(word) {
+    for (let k = 0; k < word.length; k++) {
+      if (i + k >= n) return n;
+      if (text.charAt(i + k) !== word.charAt(k)) return i + k;
+    }
+    i += word.length;
+    return -1;
+  }
+  function scanKeyColon() {
+    if (i >= n) return n;
+    if (text.charCodeAt(i) !== 0x22) return i;
+    const se = scanString();
+    if (se !== -1) return se;
+    skipWs();
+    if (i >= n) return n;
+    if (text.charCodeAt(i) !== 0x3A) return i;
+    i++;
+    return -1;
+  }
+
+  const MODE_VALUE = 0, MODE_AFTER = 1;
+  let mode = MODE_VALUE, r;
+  for (;;) {
+    skipWs();
+    if (mode === MODE_VALUE) {
+      if (i >= n) return n;
+      const c0 = text.charCodeAt(i);
+      if (c0 === 0x7B) {
+        i++; skipWs();
+        if (i >= n) return n;
+        if (text.charCodeAt(i) === 0x7D) { i++; mode = MODE_AFTER; continue; }
+        r = scanKeyColon(); if (r !== -1) return r;
+        stack.push(1); continue;
+      }
+      if (c0 === 0x5B) {
+        i++; skipWs();
+        if (i >= n) return n;
+        if (text.charCodeAt(i) === 0x5D) { i++; mode = MODE_AFTER; continue; }
+        stack.push(2); continue;
+      }
+      if (c0 === 0x22) { r = scanString(); if (r !== -1) return r; mode = MODE_AFTER; continue; }
+      if (c0 === 0x2D || (c0 >= 0x30 && c0 <= 0x39)) { r = scanNumber(); if (r !== -1) return r; mode = MODE_AFTER; continue; }
+      if (c0 === 0x74) { r = scanLiteral('true');  if (r !== -1) return r; mode = MODE_AFTER; continue; }
+      if (c0 === 0x66) { r = scanLiteral('false'); if (r !== -1) return r; mode = MODE_AFTER; continue; }
+      if (c0 === 0x6E) { r = scanLiteral('null');  if (r !== -1) return r; mode = MODE_AFTER; continue; }
+      return i; // not a value start (NBSP/BOM/smart quotes/'.'/'+'/etc.)
+    }
+    if (stack.length === 0) {
+      if (i >= n) return -1; // clean end
+      return i;              // trailing content
+    }
+    if (i >= n) return n;
+    const top = stack[stack.length - 1];
+    const c1 = text.charCodeAt(i);
+    if (top === 1) {
+      if (c1 === 0x7D) { i++; stack.pop(); continue; }
+      if (c1 === 0x2C) {
+        i++; skipWs();
+        r = scanKeyColon(); if (r !== -1) return r; // `{"a":1,}` errors AT the '}' — matches V8
+        mode = MODE_VALUE; continue;
+      }
+      return i;
+    }
+    if (c1 === 0x5D) { i++; stack.pop(); continue; }
+    if (c1 === 0x2C) { i++; mode = MODE_VALUE; continue; }
+    return i;
   }
 }
 
-function minify() {
+function isLowSurrogate(cc) { return cc >= 0xDC00 && cc <= 0xDFFF; }
+
+// length-preserving: tab → space, other C0 controls → '·', so the caret stays aligned
+function sanitizeForDisplay(s) {
+  return s.replace(/\t/g, ' ').replace(/[\u0000-\u0008\u000B-\u001F]/g, '·');
+}
+
+const EXCERPT_HALF_WIDTH = 40;
+
+function buildErrorExcerpt(text, index) {
+  const n = text.length;
+  if (index < 0) index = 0;
+  if (index > n) index = n;
+  const lineStart = text.lastIndexOf('\n', index - 1) + 1;
+  let lineEnd = text.indexOf('\n', index);
+  if (lineEnd === -1) lineEnd = n;
+  if (lineEnd < lineStart) lineEnd = lineStart;
+  const W = EXCERPT_HALF_WIDTH;
+  let start = Math.max(lineStart, index - W);
+  let end = Math.min(lineEnd, index + W + 1);
+  if (start > lineStart && isLowSurrogate(text.charCodeAt(start))) start--;
+  if (end < lineEnd && isLowSurrogate(text.charCodeAt(end))) end++;
+  const clippedL = start > lineStart, clippedR = end < lineEnd;
+  const display = (clippedL ? '…' : '') + sanitizeForDisplay(text.slice(start, end)) + (clippedR ? '…' : '');
+  const caretPad = (index - start) + (clippedL ? 1 : 0);
+  const lc = lineColFromIndex(text, index);
+  let pad = '';
+  for (let p = 0; p < caretPad; p++) pad += ' ';
+  return { excerpt: display, caret: pad + '^', line: lc.line, col: lc.col };
+}
+
+function clampIndex(text, index) {
+  if (index < 0) return 0;
+  if (index > text.length) return text.length;
+  return index;
+}
+
+// Sole validity gate. Returns {valid:true,value} | {valid:false,kind:'empty'} |
+// {valid:false,kind:'syntax',message,pos|null,excerpt|null} | {valid:false,kind:'limit',message}.
+function analyzeJson(text, opts) {
+  opts = opts || {};
+  if (EMPTY_RE.test(text)) return { valid: false, kind: 'empty' };
+  let value;
   try {
-    const parsed = JSON.parse(input.value);
-    output.innerHTML = syntaxHighlight(JSON.stringify(parsed));
-    document.getElementById('inputStatus').textContent = ' Minified';
-    document.getElementById('inputStatus').className = 'status ok';
-  } catch(e) {
-    document.getElementById('inputStatus').textContent = ' ' + e.message;
-    document.getElementById('inputStatus').className = 'status err';
+    value = JSON.parse(text); // raw untrimmed text is the coordinate space
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) {
+      return { valid: false, kind: 'limit', message: String(e && e.message || e) };
+    }
+    const message = e.message;
+    let idx = null, source = null;
+    const ep = extractEnginePosition(message);
+    if (ep && ep.index !== null) { idx = clampIndex(text, ep.index); source = 'engine'; }
+    else if (ep && ep.line !== null) { idx = clampIndex(text, indexFromLineCol(text, ep.line, ep.col)); source = 'engine-linecol'; }
+    else if (!opts.skipScanner) {
+      const si = findJsonErrorIndex(text);
+      if (si !== -1) { idx = clampIndex(text, si); source = 'scanner'; }
+    }
+    if (idx === null) return { valid: false, kind: 'syntax', message: message, pos: null, excerpt: null };
+    const ex = buildErrorExcerpt(text, idx);
+    return {
+      valid: false, kind: 'syntax', message: message,
+      pos: { index: idx, line: ex.line, col: ex.col, source: source },
+      excerpt: ex
+    };
   }
+  return { valid: true, value: value };
+}
+
+function setStatus(el, text, cls) {
+  el.textContent = text;
+  el.className = cls ? 'status ' + cls : 'status';
+}
+
+function clearOutput() {
+  output.innerHTML = '';
+  setStatus(document.getElementById('outputStatus'), '', '');
+}
+
+function hideErrorDetail() {
+  document.getElementById('errorDetail').hidden = true;
+  document.getElementById('errorExcerpt').textContent = '';
+  document.getElementById('errorCaret').textContent = '';
+  document.getElementById('errorMessage').textContent = '';
+}
+
+function showErrorDetail(r) {
+  document.getElementById('errorExcerpt').textContent = r.excerpt ? r.excerpt.excerpt : '';
+  document.getElementById('errorCaret').textContent = r.excerpt ? r.excerpt.caret : '';
+  document.getElementById('errorMessage').textContent = r.message || '';
+  document.getElementById('errorDetail').hidden = false;
+}
+
+// Every non-valid result clears the output pane and its line count, so stale valid JSON can
+// never remain visible or copyable. The excerpt box appears only for button-triggered errors.
+function renderInvalid(r, fromButton) {
+  clearOutput();
+  if (r.kind === 'empty') {
+    setStatus(document.getElementById('inputStatus'), '', '');
+    hideErrorDetail();
+    return;
+  }
+  if (r.kind === 'limit') {
+    hideErrorDetail();
+    setStatus(document.getElementById('inputStatus'), ' Could not process this input: ' + r.message, 'err');
+    return;
+  }
+  const label = r.pos ? ` Invalid JSON — line ${r.pos.line}, column ${r.pos.col}` : ' Invalid JSON';
+  setStatus(document.getElementById('inputStatus'), label, 'err');
+  if (fromButton) showErrorDetail(r); else hideErrorDetail();
+}
+
+function format() {
+  const r = analyzeJson(input.value);
+  if (r.valid) {
+    let formatted;
+    try {
+      const sel = document.getElementById('indentSize').value;
+      const indent = sel === '1' ? '\t' : parseInt(sel);
+      formatted = JSON.stringify(r.value, null, indent);
+    } catch (e) {
+      clearOutput();
+      hideErrorDetail();
+      setStatus(document.getElementById('inputStatus'), ' Valid JSON, but too deeply nested to format in this browser.', 'err');
+      return;
+    }
+    output.innerHTML = syntaxHighlight(formatted);
+    hideErrorDetail();
+    setStatus(document.getElementById('inputStatus'), ' Valid JSON', 'ok');
+    setStatus(document.getElementById('outputStatus'), `${formatted.split('\n').length} lines`, 'ok');
+    return;
+  }
+  renderInvalid(r, true);
+}
+
+function minify() {
+  const r = analyzeJson(input.value);
+  if (r.valid) {
+    let minified;
+    try {
+      minified = JSON.stringify(r.value);
+    } catch (e) {
+      clearOutput();
+      hideErrorDetail();
+      setStatus(document.getElementById('inputStatus'), ' Valid JSON, but too deeply nested to minify in this browser.', 'err');
+      return;
+    }
+    output.innerHTML = syntaxHighlight(minified);
+    hideErrorDetail();
+    setStatus(document.getElementById('inputStatus'), ' Minified', 'ok');
+    const lines = minified.split('\n').length;
+    setStatus(document.getElementById('outputStatus'), lines === 1 ? '1 line' : `${lines} lines`, 'ok');
+    return;
+  }
+  renderInvalid(r, true);
 }
 
 function copyOutput() {
@@ -262,6 +572,7 @@ function clearAll() {
   input.value = ''; output.innerHTML = '';
   document.getElementById('inputStatus').textContent = '';
   document.getElementById('outputStatus').textContent = '';
+  hideErrorDetail();
 }
 
 function sampleJSON() {
@@ -270,12 +581,9 @@ function sampleJSON() {
 }
 
 function liveCheck() {
-  const raw = input.value.trim();
-  if (!raw) { document.getElementById('inputStatus').textContent = ''; return; }
-  try { JSON.parse(raw); format(); } catch(e) {
-    document.getElementById('inputStatus').textContent = ' Invalid JSON';
-    document.getElementById('inputStatus').className = 'status err';
-  }
+  const r = analyzeJson(input.value, { skipScanner: input.value.length > SCANNER_LIVE_LIMIT });
+  if (r.valid) { format(); return; }
+  renderInvalid(r, false);
 }
 </script>
 </body>
